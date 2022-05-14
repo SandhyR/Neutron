@@ -129,9 +129,6 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 	}()
 }
 
-func handleClientbound(packet packet.Packet) {
-}
-
 type config struct {
 	Connection struct {
 		LocalAddress  string
