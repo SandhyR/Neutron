@@ -86,15 +86,16 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 					} else {
 						antikb = true
 					}
+					continue
+				} else {
 					break
 				}
-			default:
-				if err := serverConn.WritePacket(pk); err != nil {
-					if disconnect, ok := errors.Unwrap(err).(minecraft.DisconnectError); ok {
-						_ = listener.Disconnect(conn, disconnect.Error())
-					}
-					return
+			}
+			if err := serverConn.WritePacket(pk); err != nil {
+				if disconnect, ok := errors.Unwrap(err).(minecraft.DisconnectError); ok {
+					_ = listener.Disconnect(conn, disconnect.Error())
 				}
+				return
 			}
 		}
 	}()
@@ -115,16 +116,15 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 				if p.EntityRuntimeID == conn.GameData().EntityRuntimeID {
 					if antikb {
 						log.Println("antikb")
+						continue
+					} else {
 						break
 					}
 				}
-			default:
-				if err := conn.WritePacket(pk); err != nil {
-					return
-				}
-				break
 			}
-
+			if err := conn.WritePacket(pk); err != nil {
+				return
+			}
 		}
 	}()
 }
