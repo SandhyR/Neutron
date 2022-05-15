@@ -5,6 +5,7 @@ import (
 	"github.com/pelletier/go-toml"
 	"github.com/sandertv/gophertunnel/minecraft"
 	"github.com/sandertv/gophertunnel/minecraft/auth"
+	"github.com/sandertv/gophertunnel/minecraft/protocol"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 	"golang.org/x/oauth2"
 	"log"
@@ -13,6 +14,8 @@ import (
 )
 
 var antikb = false
+
+var killaura = false
 
 func main() {
 	config := readConfig()
@@ -29,6 +32,7 @@ func main() {
 	listener, err := minecraft.ListenConfig{
 		StatusProvider: p,
 	}.Listen("raknet", config.Connection.LocalAddress)
+	log.Println("Listening on " + config.Connection.LocalAddress)
 	if err != nil {
 		panic(err)
 	}
@@ -69,7 +73,6 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 
 	go func() {
 		// serverbound (client -> server)
-
 		defer listener.Disconnect(conn, "connection lost")
 		defer serverConn.Close()
 		for {
@@ -80,14 +83,22 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 
 			switch p := pk.(type) {
 			case *packet.Text:
-				if p.Message == "antikb" {
+				switch p.Message {
+				case "antikb":
 					if antikb {
 						antikb = false
 					} else {
 						antikb = true
 					}
 					continue
-				} else {
+				case "killaura":
+					if killaura {
+						killaura = false
+					} else {
+						killaura = true
+					}
+					continue
+				default:
 					break
 				}
 			}
@@ -115,12 +126,24 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 			case *packet.SetActorMotion:
 				if p.EntityRuntimeID == conn.GameData().EntityRuntimeID {
 					if antikb {
-						log.Println("antikb")
 						continue
-					} else {
-						break
 					}
 				}
+			case *packet.MoveActorAbsolute:
+				pos := p.Position
+				if killaura {
+					conn.WritePacket(&packet.InventoryTransaction{
+						TransactionData: &protocol.UseItemOnEntityTransactionData{
+							TargetEntityRuntimeID: p.EntityRuntimeID,
+							ActionType:            protocol.UseItemOnEntityActionAttack,
+							HotBarSlot:            0,
+							HeldItem:              protocol.ItemInstance{},
+							Position:              pos,
+						},
+					})
+				}
+			default:
+				break
 			}
 			if err := conn.WritePacket(pk); err != nil {
 				return
