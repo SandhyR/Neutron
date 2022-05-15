@@ -51,7 +51,6 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 	clientdata := conn.ClientData()
 	clientdata.CurrentInputMode = config.ClientData.InputMode
 	clientdata.DeviceModel = config.ClientData.DeviceModel
-	log.Println(config.ClientData.DeviceModel)
 	serverConn, err := minecraft.Dialer{
 		TokenSource: src,
 		ClientData:  clientdata,
@@ -101,6 +100,9 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 					} else {
 						killaura = true
 					}
+					continue
+				case "gamemode":
+					conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeCreative})
 					continue
 				default:
 					break

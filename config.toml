@@ -4,5 +4,5 @@
   InputMode = 0
 
 [Connection]
-  LocalAddress = "0.0.0.0:19133"
-  RemoteAddress = "127.0.0.1:19132"
+  LocalAddress = "0.0.0.0:19132"
+  RemoteAddress = ""
