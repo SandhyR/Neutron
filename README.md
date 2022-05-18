@@ -11,3 +11,8 @@ go run main.go
 # Feature
 - Anti Knockback
 - KillAura
+- Gamemode
+- Haste
+- Slow Falling
+- Night Vision
+- No Clip
