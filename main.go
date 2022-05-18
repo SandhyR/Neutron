@@ -10,12 +10,18 @@ import (
 	"golang.org/x/oauth2"
 	"log"
 	"os"
+	"strings"
 	"sync"
 )
 
 var antikb = false
-
 var killaura = false
+var haste = false
+var slowfalling = false
+var noclip = false
+var nightvision = false
+var MessagePrefix = "§o§l§6Neutron§r§7 > "
+var PREFIX = "/."
 
 func main() {
 	config := readConfig()
@@ -85,24 +91,186 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 			}
 
 			switch p := pk.(type) {
-			case *packet.Text:
-				switch p.Message {
+			case *packet.CommandRequest:
+				var message = p.CommandLine
+				if !strings.HasPrefix(message, PREFIX) {
+					return
+				}
+				var msg = strings.ToLower(message)
+				var args = strings.Split(strings.TrimPrefix(msg, PREFIX), " ")
+				var cmd = args[0]
+				switch cmd {
+				case "help":
+					sendMessage(conn, `§aHelp Commands
+§8§l• §r§7/.antikb
+§8§l• §r§7/.killaura
+§8§l• §r§7/.gamemode <type>
+§8§l• §r§7/.haste
+§8§l• §r§7/.slowfalling
+§8§l• §r§7/.nightvision
+§8§l• §r§7/.noclip
+`)
+					continue
 				case "antikb":
 					if antikb {
 						antikb = false
+						sendMessage(conn, "§aAnti Knockback has been turned off!")
 					} else {
 						antikb = true
+						sendMessage(conn, "§aAnti Knockback has been turned on!")
 					}
 					continue
 				case "killaura":
 					if killaura {
 						killaura = false
+						sendMessage(conn, "§aKill Aura has been turned off!")
 					} else {
 						killaura = true
+						sendMessage(conn, "§aKill Aura has been turned on!")
 					}
 					continue
 				case "gamemode":
-					conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeCreative})
+					switch args[1] {
+					case "0":
+						_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeSurvival})
+						sendMessage(conn, "§aSet own game mode to Survival!")
+						continue
+					case "s":
+						_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeSurvival})
+						sendMessage(conn, "§aSet own game mode to Survival!")
+						continue
+					case "survival":
+						_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeSurvival})
+						sendMessage(conn, "§aSet own game mode to Survival!")
+						continue
+					case "1":
+						_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeCreative})
+						sendMessage(conn, "§aSet own game mode to Creative!")
+						continue
+					case "c":
+						_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeCreative})
+						sendMessage(conn, "§aSet own game mode to Creative!")
+						continue
+					case "creative":
+						_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeCreative})
+						sendMessage(conn, "§aSet own game mode to Creative!")
+						continue
+					case "2":
+						_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeAdventure})
+						sendMessage(conn, "§aSet own game mode to Adventure!")
+						continue
+					case "a":
+						_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeAdventure})
+						sendMessage(conn, "§aSet own game mode to Adventure!")
+						continue
+					case "adventure":
+						_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeAdventure})
+						sendMessage(conn, "§aSet own game mode to Adventure!")
+						continue
+					default:
+						sendMessage(conn, "§cUsage: "+PREFIX+"gamemode <mode>")
+						break
+					}
+					continue
+				case "haste":
+					if haste {
+						haste = false
+						_ = conn.WritePacket(&packet.MobEffect{
+							EntityRuntimeID: conn.GameData().EntityRuntimeID,
+							Operation:       packet.MobEffectAdd,
+							EffectType:      packet.EffectHaste,
+							Amplifier:       2,
+							Particles:       false,
+							Duration:        1,
+						})
+						sendMessage(conn, "§aHaste has been turned off!")
+					} else {
+						haste = true
+						_ = conn.WritePacket(&packet.MobEffect{
+							EntityRuntimeID: conn.GameData().EntityRuntimeID,
+							Operation:       packet.MobEffectAdd,
+							EffectType:      packet.EffectHaste,
+							Amplifier:       2,
+							Particles:       false,
+							Duration:        999999999,
+						})
+						sendMessage(conn, "§aHaste has been turned on!")
+					}
+					continue
+				case "slowfalling":
+					if slowfalling {
+						slowfalling = false
+						_ = conn.WritePacket(&packet.MobEffect{
+							EntityRuntimeID: conn.GameData().EntityRuntimeID,
+							Operation:       packet.MobEffectAdd,
+							EffectType:      27,
+							Amplifier:       2,
+							Particles:       false,
+							Duration:        1,
+						})
+						sendMessage(conn, "§aSlow Falling has been turned off!")
+					} else {
+						slowfalling = true
+						_ = conn.WritePacket(&packet.MobEffect{
+							EntityRuntimeID: conn.GameData().EntityRuntimeID,
+							Operation:       packet.MobEffectAdd,
+							EffectType:      27,
+							Amplifier:       2,
+							Particles:       false,
+							Duration:        999999999,
+						})
+						sendMessage(conn, "§aSlow Falling has been turned on!")
+					}
+					continue
+				case "noclip":
+					if noclip {
+						noclip = false
+						_ = conn.WritePacket(&packet.AdventureSettings{
+							Flags:                   packet.AdventureFlagNoClip,
+							CommandPermissionLevel:  0,
+							ActionPermissions:       0,
+							PermissionLevel:         1,
+							CustomStoredPermissions: 0,
+							PlayerUniqueID:          conn.GameData().EntityUniqueID,
+						})
+						sendMessage(conn, "§aNo Clip has been turned off!")
+					} else {
+						noclip = true
+						_ = conn.WritePacket(&packet.AdventureSettings{
+							Flags:                   packet.AdventureFlagNoClip,
+							CommandPermissionLevel:  0,
+							ActionPermissions:       0x128,
+							PermissionLevel:         1,
+							CustomStoredPermissions: 0,
+							PlayerUniqueID:          conn.GameData().EntityUniqueID,
+						})
+						sendMessage(conn, "§aNo Clip has been turned on!")
+					}
+					continue
+				case "nightvision":
+					if nightvision {
+						nightvision = false
+						_ = conn.WritePacket(&packet.MobEffect{
+							EntityRuntimeID: conn.GameData().EntityRuntimeID,
+							Operation:       packet.MobEffectAdd,
+							EffectType:      packet.EffectNightVision,
+							Amplifier:       2,
+							Particles:       false,
+							Duration:        1,
+						})
+						sendMessage(conn, "§aNight Vision has been turned off!")
+					} else {
+						nightvision = true
+						_ = conn.WritePacket(&packet.MobEffect{
+							EntityRuntimeID: conn.GameData().EntityRuntimeID,
+							Operation:       packet.MobEffectAdd,
+							EffectType:      packet.EffectNightVision,
+							Amplifier:       2,
+							Particles:       false,
+							Duration:        999999999,
+						})
+						sendMessage(conn, "§aNight Vision has been turned on!")
+					}
 					continue
 				default:
 					break
@@ -138,7 +306,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 			case *packet.MoveActorAbsolute:
 				pos := p.Position
 				if killaura {
-					conn.WritePacket(&packet.InventoryTransaction{
+					_ = conn.WritePacket(&packet.InventoryTransaction{
 						TransactionData: &protocol.UseItemOnEntityTransactionData{
 							TargetEntityRuntimeID: p.EntityRuntimeID,
 							ActionType:            protocol.UseItemOnEntityActionAttack,
@@ -156,6 +324,18 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 			}
 		}
 	}()
+}
+
+func sendMessage(conn *minecraft.Conn, message string) {
+	_ = conn.WritePacket(&packet.Text{
+		TextType:         packet.TextTypeRaw,
+		NeedsTranslation: false,
+		SourceName:       "",
+		Message:          MessagePrefix + message,
+		Parameters:       nil,
+		XUID:             "",
+		PlatformChatID:   "",
+	})
 }
 
 type config struct {
