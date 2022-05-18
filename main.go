@@ -93,9 +93,6 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 			switch p := pk.(type) {
 			case *packet.CommandRequest:
 				var message = p.CommandLine
-				if !strings.HasPrefix(message, PREFIX) {
-					return
-				}
 				var msg = strings.ToLower(message)
 				var args = strings.Split(strings.TrimPrefix(msg, PREFIX), " ")
 				var cmd = args[0]
