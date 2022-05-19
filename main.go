@@ -127,46 +127,50 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 					}
 					continue
 				case "gamemode":
-					switch args[1] {
-					case "0":
-						_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeSurvival})
-						sendMessage(conn, "§aSet own game mode to Survival!")
-						continue
-					case "s":
-						_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeSurvival})
-						sendMessage(conn, "§aSet own game mode to Survival!")
-						continue
-					case "survival":
-						_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeSurvival})
-						sendMessage(conn, "§aSet own game mode to Survival!")
-						continue
-					case "1":
-						_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeCreative})
-						sendMessage(conn, "§aSet own game mode to Creative!")
-						continue
-					case "c":
-						_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeCreative})
-						sendMessage(conn, "§aSet own game mode to Creative!")
-						continue
-					case "creative":
-						_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeCreative})
-						sendMessage(conn, "§aSet own game mode to Creative!")
-						continue
-					case "2":
-						_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeAdventure})
-						sendMessage(conn, "§aSet own game mode to Adventure!")
-						continue
-					case "a":
-						_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeAdventure})
-						sendMessage(conn, "§aSet own game mode to Adventure!")
-						continue
-					case "adventure":
-						_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeAdventure})
-						sendMessage(conn, "§aSet own game mode to Adventure!")
-						continue
-					default:
+					if len(args) < 3 && len(args) > 1 {
+						switch args[1] {
+						case "0":
+							_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeSurvival})
+							sendMessage(conn, "§aSet own game mode to Survival!")
+							continue
+						case "s":
+							_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeSurvival})
+							sendMessage(conn, "§aSet own game mode to Survival!")
+							continue
+						case "survival":
+							_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeSurvival})
+							sendMessage(conn, "§aSet own game mode to Survival!")
+							continue
+						case "1":
+							_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeCreative})
+							sendMessage(conn, "§aSet own game mode to Creative!")
+							continue
+						case "c":
+							_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeCreative})
+							sendMessage(conn, "§aSet own game mode to Creative!")
+							continue
+						case "creative":
+							_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeCreative})
+							sendMessage(conn, "§aSet own game mode to Creative!")
+							continue
+						case "2":
+							_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeAdventure})
+							sendMessage(conn, "§aSet own game mode to Adventure!")
+							continue
+						case "a":
+							_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeAdventure})
+							sendMessage(conn, "§aSet own game mode to Adventure!")
+							continue
+						case "adventure":
+							_ = conn.WritePacket(&packet.SetPlayerGameType{GameType: packet.GameTypeAdventure})
+							sendMessage(conn, "§aSet own game mode to Adventure!")
+							continue
+						default:
+							sendMessage(conn, "§cUnknown \""+args[1]+"\" game mode!")
+							break
+						}
+					}else{
 						sendMessage(conn, "§cUsage: "+PREFIX+"gamemode <mode>")
-						break
 					}
 					continue
 				case "haste":
@@ -174,7 +178,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 						haste = false
 						_ = conn.WritePacket(&packet.MobEffect{
 							EntityRuntimeID: conn.GameData().EntityRuntimeID,
-							Operation:       packet.MobEffectAdd,
+							Operation:       packet.MobEffectRemove,
 							EffectType:      packet.EffectHaste,
 							Amplifier:       2,
 							Particles:       false,
@@ -199,7 +203,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 						slowfalling = false
 						_ = conn.WritePacket(&packet.MobEffect{
 							EntityRuntimeID: conn.GameData().EntityRuntimeID,
-							Operation:       packet.MobEffectAdd,
+							Operation:       packet.MobEffectRemove,
 							EffectType:      27,
 							Amplifier:       2,
 							Particles:       false,
@@ -249,7 +253,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 						nightvision = false
 						_ = conn.WritePacket(&packet.MobEffect{
 							EntityRuntimeID: conn.GameData().EntityRuntimeID,
-							Operation:       packet.MobEffectAdd,
+							Operation:       packet.MobEffectRemove,
 							EffectType:      packet.EffectNightVision,
 							Amplifier:       2,
 							Particles:       false,
