@@ -14,6 +14,8 @@ import (
 	"sync"
 )
 
+var fly = false
+
 var antikb = false
 var killaura = false
 var haste = false
@@ -91,6 +93,12 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 			}
 
 			switch p := pk.(type) {
+			case *packet.AdventureSettings:
+				//TODO: use this so that flying is not detected
+				//https://github.com/pmmp/PocketMine-MP/blob/59de045ecbacfb9acc297e75170819727d68ae09/src/network/mcpe/handler/InGamePacketHandler.php#L592
+				if p.Flags&packet.AdventureFlagFlying != 0 {
+					continue
+				}
 			case *packet.CommandRequest:
 				var message = p.CommandLine
 				var msg = strings.ToLower(message)
@@ -98,15 +106,38 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 				var cmd = args[0]
 				switch cmd {
 				case "help":
-					sendMessage(conn, `§aHelp Commands
-§8§l• §r§7/.antikb
-§8§l• §r§7/.killaura
-§8§l• §r§7/.gamemode <type>
-§8§l• §r§7/.haste
-§8§l• §r§7/.slowfalling
-§8§l• §r§7/.nightvision
-§8§l• §r§7/.noclip
-`)
+					sendMessage(conn, `§aHelp Commands §8§l• §r§7/.antikb
+					§8§l• §r§7/.killaura
+					§8§l• §r§7/.gamemode <type>
+					§8§l• §r§7/.haste
+					§8§l• §r§7/.slowfalling
+					§8§l• §r§7/.nightvision
+					§8§l• §r§7/.noclip`)
+					continue
+				case "fly":
+					if fly {
+						fly = false
+						_ = conn.WritePacket(&packet.AdventureSettings{
+							Flags:                   0 & packet.AdventureFlagAllowFlight,
+							CommandPermissionLevel:  0,
+							ActionPermissions:       0,
+							PermissionLevel:         1,
+							CustomStoredPermissions: 0,
+							PlayerUniqueID:          conn.GameData().EntityUniqueID,
+						})
+						sendMessage(conn, "§aFly has been turned off!")
+					} else {
+						fly = true
+						_ = conn.WritePacket(&packet.AdventureSettings{
+							Flags:                   0 | packet.AdventureFlagAllowFlight,
+							CommandPermissionLevel:  0,
+							ActionPermissions:       0,
+							PermissionLevel:         1,
+							CustomStoredPermissions: 0,
+							PlayerUniqueID:          conn.GameData().EntityUniqueID,
+						})
+						sendMessage(conn, "§aFly has been turned on!")
+					}
 					continue
 				case "antikb":
 					if antikb {
@@ -169,7 +200,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 							sendMessage(conn, "§cUnknown \""+args[1]+"\" game mode!")
 							break
 						}
-					}else{
+					} else {
 						sendMessage(conn, "§cUsage: "+PREFIX+"gamemode <mode>")
 					}
 					continue
@@ -227,7 +258,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 					if noclip {
 						noclip = false
 						_ = conn.WritePacket(&packet.AdventureSettings{
-							Flags:                   packet.AdventureFlagNoClip,
+							Flags:                   0 & packet.AdventureFlagAllowFlight,
 							CommandPermissionLevel:  0,
 							ActionPermissions:       0,
 							PermissionLevel:         1,
@@ -238,9 +269,9 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 					} else {
 						noclip = true
 						_ = conn.WritePacket(&packet.AdventureSettings{
-							Flags:                   packet.AdventureFlagNoClip,
+							Flags:                   0 | packet.AdventureFlagNoClip,
 							CommandPermissionLevel:  0,
-							ActionPermissions:       0x128,
+							ActionPermissions:       0,
 							PermissionLevel:         1,
 							CustomStoredPermissions: 0,
 							PlayerUniqueID:          conn.GameData().EntityUniqueID,
@@ -273,9 +304,9 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 						sendMessage(conn, "§aNight Vision has been turned on!")
 					}
 					continue
-				default:
-					break
 				}
+			default:
+				break
 			}
 			if err := serverConn.WritePacket(pk); err != nil {
 				if disconnect, ok := errors.Unwrap(err).(minecraft.DisconnectError); ok {
