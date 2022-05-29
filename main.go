@@ -258,7 +258,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 					if noclip {
 						noclip = false
 						_ = conn.WritePacket(&packet.AdventureSettings{
-							Flags:                   0 & packet.AdventureFlagAllowFlight,
+							Flags:                   0 & packet.AdventureFlagNoClip,
 							CommandPermissionLevel:  0,
 							ActionPermissions:       0,
 							PermissionLevel:         1,
