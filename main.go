@@ -12,11 +12,13 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 var fly = false
-
 var antikb = false
+var jumpboost = false
+var speed = false
 var killaura = false
 var haste = false
 var slowfalling = false
@@ -93,12 +95,18 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 			}
 
 			switch p := pk.(type) {
-			case *packet.AdventureSettings:
+			case *packet.PlayerAuthInput:
+				p.InputMode = config.AuthInput.InputMode
+				break
+			case *packet.RequestAbility:
 				//TODO: use this so that flying is not detected
-				//https://github.com/pmmp/PocketMine-MP/blob/59de045ecbacfb9acc297e75170819727d68ae09/src/network/mcpe/handler/InGamePacketHandler.php#L592
-				if p.Flags&packet.AdventureFlagFlying != 0 {
-					continue
+				//https://github.com/pmmp/PocketMine-MP/blob/4ec97d0f7ae84270abc77f02fc57b4f60d1ba87d/src/network/mcpe/handler/InGamePacketHandler.php#L974
+				if p.Ability == packet.AbilityFlying {
+					if p.Value == fly {
+						continue
+					}
 				}
+				break
 			case *packet.CommandRequest:
 				var message = p.CommandLine
 				var msg = strings.ToLower(message)
@@ -112,6 +120,8 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 					§8§l• §r§7/.haste
 					§8§l• §r§7/.slowfalling
 					§8§l• §r§7/.nightvision
+					§8§l• §r§7/.speed
+					§8§l• §r§7/.jumpboost
 					§8§l• §r§7/.noclip`)
 					continue
 				case "fly":
@@ -229,6 +239,56 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 						sendMessage(conn, "§aHaste has been turned on!")
 					}
 					continue
+				case "speed":
+					if speed {
+						speed = false
+						_ = conn.WritePacket(&packet.MobEffect{
+							EntityRuntimeID: conn.GameData().EntityRuntimeID,
+							Operation:       packet.MobEffectRemove,
+							EffectType:      packet.EffectSpeed,
+							Amplifier:       2,
+							Particles:       false,
+							Duration:        1,
+						})
+						sendMessage(conn, "§aSpeed has been turned off!")
+					} else {
+						speed = true
+						_ = conn.WritePacket(&packet.MobEffect{
+							EntityRuntimeID: conn.GameData().EntityRuntimeID,
+							Operation:       packet.MobEffectAdd,
+							EffectType:      packet.EffectSpeed,
+							Amplifier:       2,
+							Particles:       false,
+							Duration:        999999999,
+						})
+						sendMessage(conn, "§aSpeed has been turned on!")
+					}
+					continue
+				case "jumpboost":
+					if jumpboost {
+						jumpboost = false
+						_ = conn.WritePacket(&packet.MobEffect{
+							EntityRuntimeID: conn.GameData().EntityRuntimeID,
+							Operation:       packet.MobEffectRemove,
+							EffectType:      packet.EffectJumpBoost,
+							Amplifier:       2,
+							Particles:       false,
+							Duration:        1,
+						})
+						sendMessage(conn, "§aJumpBoost has been turned off!")
+					} else {
+						jumpboost = true
+						_ = conn.WritePacket(&packet.MobEffect{
+							EntityRuntimeID: conn.GameData().EntityRuntimeID,
+							Operation:       packet.MobEffectAdd,
+							EffectType:      packet.EffectJumpBoost,
+							Amplifier:       2,
+							Particles:       false,
+							Duration:        999999999,
+						})
+						sendMessage(conn, "§aJumpBoost has been turned on!")
+					}
+					continue
 				case "slowfalling":
 					if slowfalling {
 						slowfalling = false
@@ -338,15 +398,18 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 			case *packet.MoveActorAbsolute:
 				pos := p.Position
 				if killaura {
-					_ = conn.WritePacket(&packet.InventoryTransaction{
-						TransactionData: &protocol.UseItemOnEntityTransactionData{
-							TargetEntityRuntimeID: p.EntityRuntimeID,
-							ActionType:            protocol.UseItemOnEntityActionAttack,
-							HotBarSlot:            0,
-							HeldItem:              protocol.ItemInstance{},
-							Position:              pos,
-						},
-					})
+					go func() {
+						_ = conn.WritePacket(&packet.InventoryTransaction{
+							TransactionData: &protocol.UseItemOnEntityTransactionData{
+								TargetEntityRuntimeID: p.EntityRuntimeID,
+								ActionType:            protocol.UseItemOnEntityActionAttack,
+								HotBarSlot:            0,
+								HeldItem:              protocol.ItemInstance{},
+								Position:              pos,
+							},
+						})
+						time.Sleep(1 * time.Second)
+					}()
 				}
 			default:
 				break
@@ -378,6 +441,9 @@ type config struct {
 	ClientData struct {
 		DeviceModel string
 		InputMode   int
+	}
+	AuthInput struct {
+		InputMode uint32
 	}
 }
 
