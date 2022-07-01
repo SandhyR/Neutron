@@ -10,11 +10,14 @@ import (
 	"golang.org/x/oauth2"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
+var players = map[string]*Player{}
+var reach float32 = 0.0
 var fly = false
 var antikb = false
 var jumpboost = false
@@ -26,6 +29,14 @@ var noclip = false
 var nightvision = false
 var MessagePrefix = "§o§l§6Neutron§r§7 > "
 var PREFIX = "/."
+
+type Player struct {
+	name          string
+	runtimeid     uint64
+	uniqueid      int64
+	dirtymetadata map[uint32]any
+	metadata      map[uint32]any
+}
 
 func main() {
 	config := readConfig()
@@ -214,6 +225,26 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 						sendMessage(conn, "§cUsage: "+PREFIX+"gamemode <mode>")
 					}
 					continue
+				case "reach":
+					if len(args) > 1 {
+						nreach, err := strconv.ParseFloat(args[1], 32)
+						if err != nil {
+							panic(err)
+						}
+						reach = float32(nreach)
+						if args[1] == "0" {
+							for _, player := range players {
+								player.dirtymetadata = player.metadata
+								syncActor(conn, player.runtimeid, player.metadata)
+							}
+							sendMessage(conn, "Successfully reset reach")
+							continue
+						}
+
+						setReach(conn, float32(nreach))
+						sendMessage(conn, "Successfully set reach "+args[1])
+					}
+					continue
 				case "haste":
 					if haste {
 						haste = false
@@ -389,6 +420,29 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 				return
 			}
 			switch p := pk.(type) {
+			case *packet.AddPlayer:
+				players[p.Username] = &Player{runtimeid: p.EntityRuntimeID, name: p.Username, metadata: p.EntityMetadata, dirtymetadata: p.EntityMetadata, uniqueid: p.EntityUniqueID}
+				if v, ok := p.EntityMetadata[uint32(53)].(float32); ok {
+					p.EntityMetadata[uint32(53)] = v + reach
+				}
+				if v, ok := p.EntityMetadata[uint32(54)].(float32); ok {
+					p.EntityMetadata[uint32(54)] = v + reach
+				}
+				break
+			case *packet.RemoveActor:
+				for name, player := range players {
+					if player.uniqueid == p.EntityUniqueID {
+						delete(players, name)
+						break
+					}
+				}
+				break
+			case *packet.SetActorData:
+				for _, player := range players {
+					if player.runtimeid == p.EntityRuntimeID {
+						player.metadata = p.EntityMetadata
+					}
+				}
 			case *packet.SetActorMotion:
 				if p.EntityRuntimeID == conn.GameData().EntityRuntimeID {
 					if antikb {
@@ -419,6 +473,22 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 			}
 		}
 	}()
+}
+
+func setReach(conn *minecraft.Conn, reach float32) {
+	for _, p := range players {
+		if v, ok := p.dirtymetadata[uint32(53)].(float32); ok {
+			p.dirtymetadata[uint32(53)] = v + reach
+		}
+		if v, ok := p.dirtymetadata[uint32(54)].(float32); ok {
+			p.dirtymetadata[uint32(54)] = v + reach
+		}
+		syncActor(conn, p.runtimeid, p.dirtymetadata)
+	}
+}
+
+func syncActor(conn *minecraft.Conn, runtimeid uint64, metadata map[uint32]any) {
+	_ = conn.WritePacket(&packet.SetActorData{EntityRuntimeID: runtimeid, EntityMetadata: metadata, Tick: 0})
 }
 
 func sendMessage(conn *minecraft.Conn, message string) {
