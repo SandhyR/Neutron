@@ -1,15 +1,21 @@
 package main
 
 import (
+	"bytes"
 	"errors"
-	"github.com/pelletier/go-toml"
+	"fmt"
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/widget"
 	"github.com/sandertv/gophertunnel/minecraft"
 	"github.com/sandertv/gophertunnel/minecraft/auth"
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 	"golang.org/x/oauth2"
-	"log"
-	"os"
+	"io"
+	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,16 +23,8 @@ import (
 )
 
 var players = map[string]*Player{}
-var reach float32 = 0.0
-var fly = false
-var antikb = false
-var jumpboost = false
-var speed = false
-var killaura = false
-var haste = false
-var slowfalling = false
-var noclip = false
-var nightvision = false
+var proxy = Proxy{reach: 0.0, fly: false, antikb: false, jumpboost: false, speed: false, killaura: false, haste: false, slowfalling: false, noclip: false, nightvision: false}
+var application App
 var MessagePrefix = "§o§l§6Neutron§r§7 > "
 var PREFIX = "/."
 
@@ -38,57 +36,127 @@ type Player struct {
 	metadata      map[uint32]any
 }
 
+type App struct {
+	label *widget.Label
+}
+
+type Writter struct {
+	w io.Writer
+}
+
+type Proxy struct {
+	listener    *minecraft.Listener
+	serverConn  *minecraft.Conn
+	reach       float32
+	fly         bool
+	antikb      bool
+	jumpboost   bool
+	speed       bool
+	killaura    bool
+	haste       bool
+	slowfalling bool
+	noclip      bool
+	nightvision bool
+}
+
+func (Writter) Write(p []byte) (n int, err error) {
+	str := string(p[:])
+	application.label.SetText(str)
+	application.label.Refresh()
+	return len(p), nil
+}
+
 func main() {
-	config := readConfig()
-	token, err := auth.RequestLiveToken()
+	a := app.New()
+	w := a.NewWindow("Neutron")
+	w.Resize(fyne.NewSize(400, 400))
+	entryip, entryport, entrylocalport, entryinput, entrymodel := widget.NewEntry(), widget.NewEntry(), widget.NewEntry(), widget.NewSelectEntry([]string{"Mouse & Keyboard", "Touch", "Controller"}), widget.NewEntry()
+	label := widget.NewLabel("")
+	form := widget.NewForm(widget.NewFormItem("Local Port", entrylocalport), widget.NewFormItem("Target IP", entryip), widget.NewFormItem("Target Port", entryport), widget.NewFormItem("Input", entryinput), widget.NewFormItem("Device Model", entrymodel))
+
+	form.OnSubmit = func() {
+		//skidded from tal
+		if !loopbackExempted() {
+			const loopbackExemptCmd = `CheckNetIsolation LoopbackExempt -a -n="Microsoft.MinecraftUWP_8wekyb3d8bbwe"`
+			label.SetText(fmt.Sprintf("You are currently unable to join the proxy on this machine. Run %v in an admin PowerShell session to be able to.\n", loopbackExemptCmd))
+			label.Refresh()
+		}
+		startProxy(entrylocalport.Text, entryip.Text, entryport.Text, ToInput(entryinput.Text), entrymodel.Text)
+	}
+
+	form.OnCancel = func() {
+		stopProxy()
+	}
+	form.SubmitText = "Start"
+	form.CancelText = "Stop"
+
+	w.SetContent(container.NewVBox(widget.NewLabelWithStyle("Neutron", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}), form, label))
+	application = App{label: label}
+	w.ShowAndRun()
+}
+
+func stopProxy() {
+	if proxy.serverConn != nil {
+		proxy.serverConn.Close()
+	}
+	if proxy.listener != nil {
+		proxy.listener.Close()
+	}
+	application.label.SetText("Successfully stopped the proxy")
+	application.label.Refresh()
+}
+
+func startProxy(localport string, ip string, port string, input int, devicemodel string) {
+	token, err := auth.RequestLiveTokenWriter(Writter{})
 	if err != nil {
-		panic(err)
+		application.label.SetText("Session expired")
+		application.label.Refresh()
 	}
 	src := auth.RefreshTokenSource(token)
 
-	p, err := minecraft.NewForeignStatusProvider(config.Connection.RemoteAddress)
+	p, err := minecraft.NewForeignStatusProvider(ip + ":" + port)
 	if err != nil {
 		panic(err)
 	}
-	listener, err := minecraft.ListenConfig{
+	proxy.listener, err = minecraft.ListenConfig{
 		StatusProvider: p,
-	}.Listen("raknet", config.Connection.LocalAddress)
-	log.Println("Listening on " + config.Connection.LocalAddress)
+	}.Listen("raknet", "0.0.0.0:"+localport)
 	if err != nil {
 		panic(err)
 	}
-	defer listener.Close()
+	defer proxy.listener.Close()
 	for {
-		c, err := listener.Accept()
+		c, err := proxy.listener.Accept()
 		if err != nil {
 			panic(err)
 		}
-		go handleConn(c.(*minecraft.Conn), listener, config, src)
+		go handleConn(c.(*minecraft.Conn), src, ip, port, input, devicemodel)
 	}
 }
 
 // handleConn handles a new incoming minecraft.Conn from the minecraft.Listener passed.
-func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config config, src oauth2.TokenSource) {
+func handleConn(conn *minecraft.Conn, src oauth2.TokenSource, ip string, port string, input int, devicemodel string) {
 	clientdata := conn.ClientData()
-	clientdata.CurrentInputMode = config.ClientData.InputMode
-	clientdata.DeviceModel = config.ClientData.DeviceModel
-	serverConn, err := minecraft.Dialer{
+	clientdata.CurrentInputMode = input
+	clientdata.DeviceModel = devicemodel
+	var err error
+	proxy.serverConn, err = minecraft.Dialer{
 		TokenSource: src,
 		ClientData:  clientdata,
-	}.Dial("raknet", config.Connection.RemoteAddress)
+	}.Dial("raknet", ip+":"+port)
 	if err != nil {
 		panic(err)
 	}
 	var g sync.WaitGroup
 	g.Add(2)
 	go func() {
-		if err := conn.StartGame(serverConn.GameData()); err != nil {
+		if err := conn.StartGame(proxy.serverConn.GameData()); err != nil {
 			panic(err)
 		}
 		g.Done()
 	}()
 	go func() {
-		if err := serverConn.DoSpawn(); err != nil {
+		if err := proxy.serverConn.DoSpawn(); err != nil {
 			panic(err)
 		}
 		g.Done()
@@ -97,8 +165,8 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 
 	go func() {
 		// serverbound (client -> server)
-		defer listener.Disconnect(conn, "connection lost")
-		defer serverConn.Close()
+		defer proxy.listener.Disconnect(conn, "connection lost")
+		defer proxy.serverConn.Close()
 		for {
 			pk, err := conn.ReadPacket()
 			if err != nil {
@@ -107,13 +175,13 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 
 			switch p := pk.(type) {
 			case *packet.PlayerAuthInput:
-				p.InputMode = config.AuthInput.InputMode
+				p.InputMode = uint32(input)
 				break
 			case *packet.RequestAbility:
-				//TODO: use this so that flying is not detected
+				//TODO: use this so that proxy.flying is not detected
 				//https://github.com/pmmp/PocketMine-MP/blob/4ec97d0f7ae84270abc77f02fc57b4f60d1ba87d/src/network/mcpe/handler/InGamePacketHandler.php#L974
 				if p.Ability == packet.AbilityFlying {
-					if p.Value == fly {
+					if p.Value == proxy.fly {
 						continue
 					}
 				}
@@ -136,8 +204,8 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 					§8§l• §r§7/.noclip`)
 					continue
 				case "fly":
-					if fly {
-						fly = false
+					if proxy.fly {
+						proxy.fly = false
 						_ = conn.WritePacket(&packet.AdventureSettings{
 							Flags:                   0 & packet.AdventureFlagAllowFlight,
 							CommandPermissionLevel:  0,
@@ -148,7 +216,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 						})
 						sendMessage(conn, "§aFly has been turned off!")
 					} else {
-						fly = true
+						proxy.fly = true
 						_ = conn.WritePacket(&packet.AdventureSettings{
 							Flags:                   0 | packet.AdventureFlagAllowFlight,
 							CommandPermissionLevel:  0,
@@ -161,20 +229,20 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 					}
 					continue
 				case "antikb":
-					if antikb {
-						antikb = false
+					if proxy.antikb {
+						proxy.antikb = false
 						sendMessage(conn, "§aAnti Knockback has been turned off!")
 					} else {
-						antikb = true
+						proxy.antikb = true
 						sendMessage(conn, "§aAnti Knockback has been turned on!")
 					}
 					continue
 				case "killaura":
-					if killaura {
-						killaura = false
+					if proxy.killaura {
+						proxy.killaura = false
 						sendMessage(conn, "§aKill Aura has been turned off!")
 					} else {
-						killaura = true
+						proxy.killaura = true
 						sendMessage(conn, "§aKill Aura has been turned on!")
 					}
 					continue
@@ -231,7 +299,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 						if err != nil {
 							panic(err)
 						}
-						reach = float32(nreach)
+						proxy.reach = float32(nreach)
 						if args[1] == "0" {
 							for _, player := range players {
 								player.dirtymetadata = player.metadata
@@ -246,8 +314,8 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 					}
 					continue
 				case "haste":
-					if haste {
-						haste = false
+					if proxy.haste {
+						proxy.haste = false
 						_ = conn.WritePacket(&packet.MobEffect{
 							EntityRuntimeID: conn.GameData().EntityRuntimeID,
 							Operation:       packet.MobEffectRemove,
@@ -258,7 +326,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 						})
 						sendMessage(conn, "§aHaste has been turned off!")
 					} else {
-						haste = true
+						proxy.haste = true
 						_ = conn.WritePacket(&packet.MobEffect{
 							EntityRuntimeID: conn.GameData().EntityRuntimeID,
 							Operation:       packet.MobEffectAdd,
@@ -271,8 +339,8 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 					}
 					continue
 				case "speed":
-					if speed {
-						speed = false
+					if proxy.speed {
+						proxy.speed = false
 						_ = conn.WritePacket(&packet.MobEffect{
 							EntityRuntimeID: conn.GameData().EntityRuntimeID,
 							Operation:       packet.MobEffectRemove,
@@ -283,7 +351,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 						})
 						sendMessage(conn, "§aSpeed has been turned off!")
 					} else {
-						speed = true
+						proxy.speed = true
 						_ = conn.WritePacket(&packet.MobEffect{
 							EntityRuntimeID: conn.GameData().EntityRuntimeID,
 							Operation:       packet.MobEffectAdd,
@@ -296,8 +364,8 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 					}
 					continue
 				case "jumpboost":
-					if jumpboost {
-						jumpboost = false
+					if proxy.jumpboost {
+						proxy.jumpboost = false
 						_ = conn.WritePacket(&packet.MobEffect{
 							EntityRuntimeID: conn.GameData().EntityRuntimeID,
 							Operation:       packet.MobEffectRemove,
@@ -308,7 +376,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 						})
 						sendMessage(conn, "§aJumpBoost has been turned off!")
 					} else {
-						jumpboost = true
+						proxy.jumpboost = true
 						_ = conn.WritePacket(&packet.MobEffect{
 							EntityRuntimeID: conn.GameData().EntityRuntimeID,
 							Operation:       packet.MobEffectAdd,
@@ -321,8 +389,8 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 					}
 					continue
 				case "slowfalling":
-					if slowfalling {
-						slowfalling = false
+					if proxy.slowfalling {
+						proxy.slowfalling = false
 						_ = conn.WritePacket(&packet.MobEffect{
 							EntityRuntimeID: conn.GameData().EntityRuntimeID,
 							Operation:       packet.MobEffectRemove,
@@ -333,7 +401,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 						})
 						sendMessage(conn, "§aSlow Falling has been turned off!")
 					} else {
-						slowfalling = true
+						proxy.slowfalling = true
 						_ = conn.WritePacket(&packet.MobEffect{
 							EntityRuntimeID: conn.GameData().EntityRuntimeID,
 							Operation:       packet.MobEffectAdd,
@@ -346,8 +414,8 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 					}
 					continue
 				case "noclip":
-					if noclip {
-						noclip = false
+					if proxy.noclip {
+						proxy.noclip = false
 						_ = conn.WritePacket(&packet.AdventureSettings{
 							Flags:                   0 & packet.AdventureFlagNoClip,
 							CommandPermissionLevel:  0,
@@ -358,7 +426,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 						})
 						sendMessage(conn, "§aNo Clip has been turned off!")
 					} else {
-						noclip = true
+						proxy.noclip = true
 						_ = conn.WritePacket(&packet.AdventureSettings{
 							Flags:                   0 | packet.AdventureFlagNoClip,
 							CommandPermissionLevel:  0,
@@ -371,8 +439,8 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 					}
 					continue
 				case "nightvision":
-					if nightvision {
-						nightvision = false
+					if proxy.nightvision {
+						proxy.nightvision = false
 						_ = conn.WritePacket(&packet.MobEffect{
 							EntityRuntimeID: conn.GameData().EntityRuntimeID,
 							Operation:       packet.MobEffectRemove,
@@ -383,7 +451,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 						})
 						sendMessage(conn, "§aNight Vision has been turned off!")
 					} else {
-						nightvision = true
+						proxy.nightvision = true
 						_ = conn.WritePacket(&packet.MobEffect{
 							EntityRuntimeID: conn.GameData().EntityRuntimeID,
 							Operation:       packet.MobEffectAdd,
@@ -399,9 +467,9 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 			default:
 				break
 			}
-			if err := serverConn.WritePacket(pk); err != nil {
+			if err := proxy.serverConn.WritePacket(pk); err != nil {
 				if disconnect, ok := errors.Unwrap(err).(minecraft.DisconnectError); ok {
-					_ = listener.Disconnect(conn, disconnect.Error())
+					_ = proxy.listener.Disconnect(conn, disconnect.Error())
 				}
 				return
 			}
@@ -409,13 +477,13 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 	}()
 	go func() {
 		// clientbound (server -> client)
-		defer serverConn.Close()
-		defer listener.Disconnect(conn, "connection lost")
+		defer proxy.serverConn.Close()
+		defer proxy.listener.Disconnect(conn, "connection lost")
 		for {
-			pk, err := serverConn.ReadPacket()
+			pk, err := proxy.serverConn.ReadPacket()
 			if err != nil {
 				if disconnect, ok := errors.Unwrap(err).(minecraft.DisconnectError); ok {
-					_ = listener.Disconnect(conn, disconnect.Error())
+					_ = proxy.listener.Disconnect(conn, disconnect.Error())
 				}
 				return
 			}
@@ -423,10 +491,10 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 			case *packet.AddPlayer:
 				players[p.Username] = &Player{runtimeid: p.EntityRuntimeID, name: p.Username, metadata: p.EntityMetadata, dirtymetadata: p.EntityMetadata, uniqueid: p.EntityUniqueID}
 				if v, ok := p.EntityMetadata[uint32(53)].(float32); ok {
-					p.EntityMetadata[uint32(53)] = v + reach
+					p.EntityMetadata[uint32(53)] = v + proxy.reach
 				}
 				if v, ok := p.EntityMetadata[uint32(54)].(float32); ok {
-					p.EntityMetadata[uint32(54)] = v + reach
+					p.EntityMetadata[uint32(54)] = v + proxy.reach
 				}
 				break
 			case *packet.RemoveActor:
@@ -445,13 +513,13 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 				}
 			case *packet.SetActorMotion:
 				if p.EntityRuntimeID == conn.GameData().EntityRuntimeID {
-					if antikb {
+					if proxy.antikb {
 						continue
 					}
 				}
 			case *packet.MoveActorAbsolute:
 				pos := p.Position
-				if killaura {
+				if proxy.killaura {
 					go func() {
 						_ = conn.WritePacket(&packet.InventoryTransaction{
 							TransactionData: &protocol.UseItemOnEntityTransactionData{
@@ -503,49 +571,23 @@ func sendMessage(conn *minecraft.Conn, message string) {
 	})
 }
 
-type config struct {
-	Connection struct {
-		LocalAddress  string
-		RemoteAddress string
+func loopbackExempted() bool {
+	if runtime.GOOS != "windows" {
+		return true
 	}
-	ClientData struct {
-		DeviceModel string
-		InputMode   int
-	}
-	AuthInput struct {
-		InputMode uint32
-	}
+	data, _ := exec.Command("CheckNetIsolation", "LoopbackExempt", "-s", `-n="microsoft.minecraftuwp_8wekyb3d8bbwe"`).CombinedOutput()
+	return bytes.Contains(data, []byte("microsoft.minecraftuwp_8wekyb3d8bbwe"))
 }
 
-func readConfig() config {
-	c := config{}
-	if _, err := os.Stat("config.toml"); os.IsNotExist(err) {
-		f, err := os.Create("config.toml")
-		if err != nil {
-			log.Fatalf("error creating config: %v", err)
-		}
-		data, err := toml.Marshal(c)
-		if err != nil {
-			log.Fatalf("error encoding default config: %v", err)
-		}
-		if _, err := f.Write(data); err != nil {
-			log.Fatalf("error writing encoded default config: %v", err)
-		}
-		_ = f.Close()
+func ToInput(input string) int {
+	switch input {
+	case "Mouse & Keyboard":
+		return 1
+	case "Touch":
+		return 2
+	case "Controller":
+		return 3
+
 	}
-	data, err := os.ReadFile("config.toml")
-	if err != nil {
-		log.Fatalf("error reading config: %v", err)
-	}
-	if err := toml.Unmarshal(data, &c); err != nil {
-		log.Fatalf("error decoding config: %v", err)
-	}
-	if c.Connection.LocalAddress == "" {
-		c.Connection.LocalAddress = "0.0.0.0:19132"
-	}
-	data, _ = toml.Marshal(c)
-	if err := os.WriteFile("config.toml", data, 0644); err != nil {
-		log.Fatalf("error writing config file: %v", err)
-	}
-	return c
+	return 0
 }
