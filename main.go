@@ -178,9 +178,9 @@ func handleConn(conn *minecraft.Conn, src oauth2.TokenSource, ip string, port st
 				p.InputMode = uint32(input)
 				break
 			case *packet.RequestAbility:
-				//TODO: use this so that proxy.flying is not detected
+				//TODO: use this so that flying is not detected
 				//https://github.com/pmmp/PocketMine-MP/blob/4ec97d0f7ae84270abc77f02fc57b4f60d1ba87d/src/network/mcpe/handler/InGamePacketHandler.php#L974
-				if p.Ability == packet.AbilityFlying {
+				if p.Ability == protocol.AbilityFlying {
 					if p.Value == proxy.fly {
 						continue
 					}
