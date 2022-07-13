@@ -46,7 +46,6 @@ jobs:
           CGO_ENABLED: 0
         run: |
           if [ $GOOS = "windows" ]; then export BINARY_SUFFIX="$BINARY_SUFFIX.exe"; fi
-          if $IS_PR ; then echo $PR_PROMPT; fi
           export BINARY_NAME="$BINARY_PREFIX$GOOS_$GOARCH$BINARY_SUFFIX"
           export LD_FLAGS="-w -s -X main.VERSION=${COMMIT_ID::7}"
           go mod tidy
