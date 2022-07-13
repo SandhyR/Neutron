@@ -5,7 +5,7 @@ go 1.18
 require (
 	fyne.io/fyne/v2 v2.2.3
 	github.com/pelletier/go-toml v1.9.5
-	github.com/sandertv/gophertunnel v1.21.1-0.20220607201544-7c055c3cdbbc
+	github.com/sandertv/gophertunnel v1.22.0
 	golang.org/x/oauth2 v0.0.0-20220524215830-622c5d57e401
 )
 
