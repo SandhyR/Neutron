@@ -7,7 +7,7 @@ on:
     branches: [ "main" ]
     
 env:
-  BINARY_PREFIX: "study_xxqg_"
+  BINARY_PREFIX: "Neutron"
   BINARY_SUFFIX: ""
   PR_PROMPT: "::warning:: Build artifact will not be uploaded due to the workflow is trigged by pull request."
   LD_FLAGS: "-w -s"
