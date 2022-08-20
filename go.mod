@@ -5,7 +5,7 @@ go 1.18
 require (
 	fyne.io/fyne/v2 v2.2.3
 	github.com/pelletier/go-toml v1.9.5
-	github.com/sandertv/gophertunnel v1.22.0
+	github.com/sandertv/gophertunnel v1.24.0
 	golang.org/x/oauth2 v0.0.0-20220524215830-622c5d57e401
 )
 
@@ -30,7 +30,7 @@ require (
 	github.com/klauspost/compress v1.15.6 // indirect
 	github.com/muhammadmuzzammil1998/jsonc v1.0.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/sandertv/go-raknet v1.10.9 // indirect
+	github.com/sandertv/go-raknet v1.11.1 // indirect
 	github.com/srwiley/oksvg v0.0.0-20200311192757-870daf9aa564 // indirect
 	github.com/srwiley/rasterx v0.0.0-20200120212402-85cb7272f5e9 // indirect
 	github.com/stretchr/testify v1.7.2 // indirect
