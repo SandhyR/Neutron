@@ -489,7 +489,7 @@ func handleConn(conn *minecraft.Conn, src oauth2.TokenSource, ip string, port st
 			}
 			switch p := pk.(type) {
 			case *packet.AddPlayer:
-				players[p.Username] = &Player{runtimeid: p.EntityRuntimeID, name: p.Username, metadata: p.EntityMetadata, dirtymetadata: p.EntityMetadata, uniqueid: p.EntityUniqueID}
+				players[p.Username] = &Player{runtimeid: p.EntityRuntimeID, name: p.Username, metadata: p.EntityMetadata, dirtymetadata: p.EntityMetadata, uniqueid: p.AbilityData.EntityUniqueID}
 				if v, ok := p.EntityMetadata[uint32(53)].(float32); ok {
 					p.EntityMetadata[uint32(53)] = v + proxy.reach
 				}
